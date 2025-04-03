@@ -130,7 +130,7 @@ But for day-to-day safety checks after copying files, `verifycopy.zsh` is faster
 ### Clone the Script
 
 ```bash
-git clone https://github.com/yourusername/verify-copy-zsh.git ~/Tools/verifycopy
+git clone https://github.com/agarwalvishal/verifycopy.git ~/Tools/verifycopy
 cd ~/Tools/verifycopy
 chmod +x verifycopy.zsh
 ```
