@@ -12,13 +12,13 @@ read SOURCE
 echo -n "Enter path to DESTINATION folder: "
 read DEST
 
-echo -n "Do you want to check timestamps as well? (yes/no): "
+echo -n "Do you want to check timestamps as well? (yes/no) [yes]: "
 read CHECK_TIMESTAMP_INPUT
 
-if [[ "$CHECK_TIMESTAMP_INPUT" =~ ^[Yy](es)?$ ]]; then
-  CHECK_TIMESTAMP=true
-else
+if [[ "$CHECK_TIMESTAMP_INPUT" =~ ^[Nn](o)?$ ]]; then
   CHECK_TIMESTAMP=false
+else
+  CHECK_TIMESTAMP=true
 fi
 
 # Validate input
@@ -35,12 +35,19 @@ fi
 TMP_SRC=$(mktemp)
 TMP_DST=$(mktemp)
 
-# Set output file path relative to actual script location
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+# === Resolve actual script directory using readlink ===
+SCRIPT_PATH="$0"
+if [ -L "$SCRIPT_PATH" ]; then
+  LINK_TARGET=$(readlink "$SCRIPT_PATH")
+  # Handle relative symlink paths
+  [[ "$LINK_TARGET" != /* ]] && LINK_TARGET="$(dirname "$SCRIPT_PATH")/$LINK_TARGET"
+  SCRIPT_PATH="$LINK_TARGET"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 DIFF_FILE="$SCRIPT_DIR/verifycopy_diff_output.txt"
 : > "$DIFF_FILE"
 
-# Use timestamp if selected
+# === SCAN FILES ===
 if $CHECK_TIMESTAMP; then
   echo "${YELLOW}Scanning source with timestamp...${RESET}"
   cd "$SOURCE"
@@ -61,7 +68,7 @@ fi
 
 echo "${YELLOW}Comparing files...${RESET}"
 
-# Generate readable diff output
+# === DIFF LOGIC ===
 diff --side-by-side --suppress-common-lines "$TMP_SRC" "$TMP_DST" | while IFS= read -r line; do
   if [[ "$line" == *"|"* ]]; then
     echo "CHANGED: $line" >> "$DIFF_FILE"
@@ -72,10 +79,10 @@ diff --side-by-side --suppress-common-lines "$TMP_SRC" "$TMP_DST" | while IFS= r
   fi
 done
 
-# Cleanup temp files
+# === CLEANUP TEMP FILES ===
 rm -f "$TMP_SRC" "$TMP_DST"
 
-# Output results
+# === RESULT OUTPUT ===
 if [[ ! -s "$DIFF_FILE" ]]; then
   echo "${GREEN}Success: All files match by path, size$($CHECK_TIMESTAMP && echo ', and modification time').${RESET}"
   echo "No diff file generated since no mismatches were found."
