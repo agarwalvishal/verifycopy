@@ -39,7 +39,6 @@ TMP_DST=$(mktemp)
 SCRIPT_PATH="$0"
 if [ -L "$SCRIPT_PATH" ]; then
   LINK_TARGET=$(readlink "$SCRIPT_PATH")
-  # Handle relative symlink paths
   [[ "$LINK_TARGET" != /* ]] && LINK_TARGET="$(dirname "$SCRIPT_PATH")/$LINK_TARGET"
   SCRIPT_PATH="$LINK_TARGET"
 fi
@@ -47,35 +46,61 @@ SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 DIFF_FILE="$SCRIPT_DIR/verifycopy_diff_output.txt"
 : > "$DIFF_FILE"
 
-# === SCAN FILES ===
-if $CHECK_TIMESTAMP; then
-  echo "${YELLOW}Scanning source with timestamp...${RESET}"
-  cd "$SOURCE"
-  find . -type f ! -name '._*' -exec stat -f "%N %z %m" {} \; | sort > "$TMP_SRC"
+# === Function to scan a folder ===
+scan_folder() {
+  local FOLDER="$1"
+  local OUTPUT="$2"
+  local INCLUDE_TIMESTAMP="$3"
 
-  echo "${YELLOW}Scanning destination with timestamp...${RESET}"
-  cd "$DEST"
-  find . -type f ! -name '._*' -exec stat -f "%N %z %m" {} \; | sort > "$TMP_DST"
-else
-  echo "${YELLOW}Scanning source without timestamp...${RESET}"
-  cd "$SOURCE"
-  find . -type f ! -name '._*' -exec stat -f "%N %z" {} \; | sort > "$TMP_SRC"
+  cd "$FOLDER" || return 1
 
-  echo "${YELLOW}Scanning destination without timestamp...${RESET}"
-  cd "$DEST"
-  find . -type f ! -name '._*' -exec stat -f "%N %z" {} \; | sort > "$TMP_DST"
-fi
+  if [[ "$INCLUDE_TIMESTAMP" == "true" ]]; then
+    find . -type f ! -name '._*' ! -name '.DS_Store' -exec stat -f "%N %z %m" {} \; | sort > "$OUTPUT"
+  else
+    find . -type f ! -name '._*' ! -name '.DS_Store' -exec stat -f "%N %z" {} \; | sort > "$OUTPUT"
+  fi
+}
+
+# === SCAN FOLDERS ===
+echo "${YELLOW}Scanning source...${RESET}"
+scan_folder "$SOURCE" "$TMP_SRC" "$CHECK_TIMESTAMP"
+
+echo "${YELLOW}Scanning destination...${RESET}"
+scan_folder "$DEST" "$TMP_DST" "$CHECK_TIMESTAMP"
 
 echo "${YELLOW}Comparing files...${RESET}"
 
-# === DIFF LOGIC ===
-diff --side-by-side --suppress-common-lines "$TMP_SRC" "$TMP_DST" | while IFS= read -r line; do
-  if [[ "$line" == *"|"* ]]; then
-    echo "CHANGED: $line" >> "$DIFF_FILE"
-  elif [[ "$line" == *"<"* ]]; then
-    echo "MISSING in DEST: ${line%%<*}" >> "$DIFF_FILE"
-  elif [[ "$line" == *">"* ]]; then
-    echo "MISSING in SOURCE: ${line##*>}" >> "$DIFF_FILE"
+# === LOAD FILE LISTINGS INTO MAPS ===
+typeset -A source_map
+typeset -A dest_map
+
+# Load source entries
+while IFS= read -r line; do
+  key="${line%% *}"  # Extract relative file path
+  source_map["$key"]="$line"
+done < "$TMP_SRC"
+
+# Load destination entries
+while IFS= read -r line; do
+  key="${line%% *}"
+  dest_map["$key"]="$line"
+done < "$TMP_DST"
+
+# === COMPARE FILES ===
+all_keys=( ${(k)source_map} ${(k)dest_map} )
+all_keys=( ${(u)all_keys} )
+
+for key in $all_keys; do
+  src="${source_map[$key]}"
+  dst="${dest_map[$key]}"
+  if [[ -n "$src" && -n "$dst" ]]; then
+    if [[ "$src" != "$dst" ]]; then
+      echo "CHANGED: $src → $dst" >> "$DIFF_FILE"
+    fi
+  elif [[ -n "$src" ]]; then
+    echo "MISSING in DEST: $src" >> "$DIFF_FILE"
+  elif [[ -n "$dst" ]]; then
+    echo "MISSING in SOURCE: $dst" >> "$DIFF_FILE"
   fi
 done
 
