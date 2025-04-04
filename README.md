@@ -17,7 +17,9 @@ Designed for **post-copy sanity checking**: useful after backups, manual drag-an
   - Files missing in the destination
   - Extra files in the destination
   - Files with same path but different size or timestamp (marked as changed)
-- Skips macOS AppleDouble files (`._*`) that contain metadata but not actual file content
+- Skips:
+  - macOS AppleDouble files (`._*`) that contain metadata but not actual file content
+  - `.DS_Store` files — macOS Finder metadata that clutters directories but has no user data
 - Outputs:
   - A **color-coded summary** in terminal
   - A detailed **diff-style log** saved as `verifycopy_diff_output.txt` in the script directory
@@ -43,6 +45,7 @@ Normal dotfiles (like `.bashrc`, `.config`) are **not affected** and are fully i
 Timestamps detect changes that file size cannot — for example:
 
 - File was edited but size didn't change
+  - In real-world edits, file size can remain the same (e.g., a text file is edited but eventually it contains the same number of characters and therefore has the same size), but timestamp can change — enabling timestamp check helps detect such changes reliably without needing checksums.
 - File was re-encoded or touched
 - File was modified during sync
 
@@ -91,9 +94,9 @@ Timestamps detect changes that file size cannot — for example:
 
 While `verifycopy.zsh` is ideal for most real-world usage, it does **not** perform full content-level validation. Specifically:
 
-- ❌ It does **not** compare actual file contents (no hashing or checksums)
-- ❌ It does **not** verify file permissions, symlinks, or extended attributes
-- ❌ It does **not** detect bit-level corruption when size and timestamp are identical
+- It does **not** compare actual file contents (no hashing or checksums)
+- It does **not** verify file permissions, symlinks, or extended attributes
+- It does **not** detect bit-level corruption when size and timestamp are identical
 
 If you need full integrity verification, use `rsync` with checksums (see next section).
 
@@ -196,3 +199,11 @@ rm -rf ~/Tools/verifycopy
 - It verifies the success of manual file copies and provides peace of mind before deleting original files and helps catch skips, overwrites, or modifications.
 - It’s designed to give you fast, trustworthy feedback — without needing to understand `rsync`, parse obscure flags, or risk overwriting data.
 - Use it confidently for backups, file migrations, or post-transfer validation when bit-level hashing is overkill.
+
+---
+
+## Test Coverage
+
+This script is backed by an automated test suite covering all meaningful file copy edge cases — including missing files, size mismatches, timestamp-only differences, and known safe exclusions.
+
+👉 [View the full test coverage matrix here](./TEST_COVERAGE.md)
